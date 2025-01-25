@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "echoforgeai"
+version = "0.1.0"
+description = "A flexible Python library for creating immersive, dynamic story-driven experiences with LLMs"
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+authors = [
+    { name = "Constantin" }
+]
+dependencies = [
+    "numpy>=1.21.0",
+    "faiss-cpu>=1.7.0", # For vector storage
+    "pydantic>=2.0.0", # For data validation
+    "aiohttp>=3.8.0", # For async support
+    "openai>=1.0.0", # For LLM integration
+    "tenacity>=8.0.0", # For retry logic
+    "python-dotenv>=1.0.0", # For environment variable management
+    "ruff>=0.9.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=22.0.0",
+    "isort>=5.0.0",
+    "mypy>=1.0.0",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py38"]
+
+[tool.isort]
+profile = "black"
+line_length = 100 

@@ -169,3 +169,26 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Virtual Environment
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# uv
+.uv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Project specific
+examples/.env
+.cursorrules
