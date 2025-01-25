@@ -1,4 +1,4 @@
-# HearthKin 2
+# Echo Forge AI
 
 A flexible Python library for creating immersive, dynamic story-driven experiences with LLMs.
 
@@ -12,13 +12,13 @@ A flexible Python library for creating immersive, dynamic story-driven experienc
 
 ## Installation
 
-HearthKin 2 uses [uv](https://github.com/astral-sh/uv) for package management. First, install uv if you haven't already:
+Echo Forge AI uses [uv](https://github.com/astral-sh/uv) for package management. First, install uv if you haven't already:
 
 ```bash
 pip install uv
 ```
 
-Then install HearthKin 2:
+Then install Echo Forge AI:
 
 ```bash
 # Create and activate a new virtual environment
