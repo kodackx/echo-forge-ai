@@ -140,14 +140,59 @@ The smell of hearth-cooked stew and fresh bread fills your nostrils. Behind the 
 polishes a mug while keeping a watchful eye on his patrons. In a shadowy corner, a cloaked figure sits alone, 
 occasionally sipping from an ornate goblet.
 
-The tavern is relatively quiet tonight, perfect for either a peaceful drink or perhaps something more interesting...""",
+The tavern is relatively quiet tonight, perfect for either a peaceful drink or perhaps something more interesting. 
+As a newcomer, you can feel Old Tom's observant gaze taking note of your arrival, while the mysterious stranger 
+seems to briefly glance in your direction before returning to their drink.""",
         is_entry_point=True,
-        tags={"tavern", "evening", "peaceful"},
-        available_choices=[
-            "Approach the bar and greet Old Tom",
-            "Find a quiet table for yourself",
-            "Try to catch the eye of the mysterious stranger",
-            "Listen to the ambient tavern conversations"
+        tags={"tavern", "evening", "peaceful"}
+    )
+
+
+async def create_player_character() -> Character:
+    """Create the player character through a simple dialogue."""
+    print("\nBefore you enter the tavern, let's establish who you are...")
+    
+    # Get basic info
+    name = input("\nWhat is your character's name? ").strip()
+    background = input("\nBriefly describe your background (e.g., 'A wandering merchant', 'A retired soldier'): ").strip()
+    
+    # Define some basic personality traits
+    print("\nRate the following traits from 0.0 to 1.0:")
+    traits = {
+        "brave": float(input("How brave are you? (0.0-1.0): ").strip()),
+        "curious": float(input("How curious are you? (0.0-1.0): ").strip()),
+        "diplomatic": float(input("How diplomatic are you? (0.0-1.0): ").strip())
+    }
+    
+    # Create personality model
+    personality = PersonalityModel(
+        traits={
+            name: PersonalityTrait(
+                name=name,
+                intensity=value,
+                description=f"Character's level of {name}"
+            )
+            for name, value in traits.items()
+        },
+        goals=[
+            CharacterGoal(
+                description="Find adventure and opportunity in the tavern",
+                priority=0.8,
+                is_long_term=True
+            )
+        ],
+        archetype="Player Character",
+        background=background
+    )
+    
+    # Create the character
+    return Character(
+        name=name,
+        personality=personality,
+        initial_knowledge=[
+            f"You are {name}, {background}",
+            "You've heard rumors about the Silver Flagon tavern being a place where interesting opportunities arise",
+            "You're new to this town and looking to make a name for yourself"
         ]
     )
 

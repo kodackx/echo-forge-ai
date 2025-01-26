@@ -54,12 +54,28 @@ class LLMService:
         """
         # Build the prompt
         memory_context = "\n".join(f"- {m}" for m in memories)
-        character_info = ""
+        
+        # Separate player character from NPCs for clearer context
+        player_context = ""
+        npc_contexts = ""
         if character_contexts:
-            character_info = "\n".join(
-                f"{name}: {json.dumps(ctx, indent=2)}"
-                for name, ctx in character_contexts.items()
-            )
+            for name, ctx in character_contexts.items():
+                if ctx["personality"].get("archetype") == "Player Character":
+                    player_context = f"Player ({name}):\n{json.dumps(ctx, indent=2)}"
+                else:
+                    npc_contexts += f"\n{name}:\n{json.dumps(ctx, indent=2)}"
+        
+        # Define metadata format separately to avoid deep nesting in f-string
+        metadata_format = """
+{
+    "character_updates": {
+        "character_name": {
+            "relationships": {"other_character": sentiment_value},
+            "goal_updates": [{"description": "goal text", "progress": progress_value}],
+            "new_knowledge": ["new fact learned"]
+        }
+    }
+}"""
             
         prompt = f"""You are an expert storyteller. Based on the current story state and user input, generate the next story beat.
 
@@ -69,22 +85,24 @@ Current Story State:
 Relevant Memories:
 {memory_context}
 
-Character Information:
-{character_info}
+Player Character Information:
+{player_context}
+
+NPC Information:
+{npc_contexts}
 
 User Input:
 {user_input}
 
 Generate an engaging continuation of the story that:
-1. Responds naturally to the user's input
-2. Maintains consistency with previous events
-3. Provides 2-4 meaningful choices for the next action
-4. Advances character development where appropriate
+1. Responds naturally to the user's input, taking into account the player character's personality and background
+2. Maintains consistency with previous events and character knowledge
+3. Has NPCs react appropriately based on their personalities and relationships
+4. Advances character relationships and story development naturally
 
 Format your response as JSON with:
-- "text": The story continuation
-- "choices": List of possible next actions
-- "metadata": Any additional information (character updates, new relationships, etc.)
+- "text": The story continuation (written in second person, addressing the player character directly)
+- "metadata": {metadata_format}
 """
         
         # Call the LLM

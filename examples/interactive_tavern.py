@@ -7,7 +7,7 @@ import os
 from dotenv import load_dotenv
 
 from echoforgeai import Story, StoryConfig
-from tavern_adventure import create_characters, create_initial_node
+from tavern_adventure import create_characters, create_initial_node, create_player_character
 
 async def main():
     # Load environment variables
@@ -19,13 +19,18 @@ async def main():
         api_key=os.getenv("OPENAI_API_KEY")
     ))
     
-    # Add characters and initial node
-    print("Setting up the tavern scene...")
+    # Create player character first
+    player = await create_player_character()
+    await story.add_character(player)
+    
+    # Add NPC characters and initial node
+    print("\nSetting up the tavern scene...")
     for character in await create_characters():
         await story.add_character(character)
     story.graph.add_node(create_initial_node())
     
     # Start the story
+    print(f"\nWelcome, {player.name}!")
     print("\nStarting the story...\n")
     result = await story.start()
     print(result["text"])
@@ -33,34 +38,14 @@ async def main():
     # Main interaction loop
     while True:
         try:
-            # Display available choices
-            if "choices" in result and result["choices"]:
-                print("\nWhat would you like to do?")
-                for i, choice in enumerate(result["choices"], 1):
-                    print(f"{i}. {choice}")
+            print(f"\nWhat would you like to do, {player.name}? (type 'quit' to end)")
+            user_input = input("> ").strip()
+            
+            if user_input.lower() == 'quit':
+                break
                 
-                # Get user input
-                user_input = input("\nYour choice (or 'quit' to end): ").strip()
-                if user_input.lower() == 'quit':
-                    break
-                
-                try:
-                    choice_num = int(user_input)
-                    if 1 <= choice_num <= len(result["choices"]):
-                        # Use the actual choice text for the story advancement
-                        chosen_action = result["choices"][choice_num - 1]
-                        result = await story.advance(chosen_action)
-                        print(f"\n{result['text']}")
-                    else:
-                        print("Invalid choice number. Please try again.")
-                except ValueError:
-                    # If the input isn't a number, use it as direct input
-                    result = await story.advance(user_input)
-                    print(f"\n{result['text']}")
-            else:
-                print("\nThe story has reached an end. Type 'quit' to exit.")
-                if input().lower() == 'quit':
-                    break
+            result = await story.advance(user_input)
+            print(f"\n{result['text']}")
                     
         except KeyboardInterrupt:
             break
