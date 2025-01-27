@@ -14,6 +14,7 @@ class LLMResponse(BaseModel):
     text: str
     choices: List[str] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    dialogues: Dict[str, str] = Field(default_factory=dict)  # {character_name: dialogue_text}
 
     class Config:
         arbitrary_types_allowed = True
@@ -45,78 +46,79 @@ class LLMService:
         current_content: str,
         user_input: str,
         memories: List[str],
-        character_contexts: Optional[Dict[str, dict]] = None
+        character_contexts: Optional[Dict[str, dict]] = None,
+        chapter_summaries: List[str] = None
     ) -> LLMResponse:
-        """
-        Generate the next story beat based on current context and user input.
-        
-        Args:
-            current_content: The current story node's content
-            user_input: The user's input/choice
-            memories: List of relevant memory strings
-            character_contexts: Optional dict of character contexts
-            
-        Returns:
-            LLMResponse containing generated text and choices
-        """
+        """Enhanced story beat generation with professional writing guidance"""
         if self.debug_mode:
             self.logger.debug(f"Generating story beat for input: {user_input}")
             self.logger.debug(f"Current content length: {len(current_content)}")
             self.logger.debug(f"Number of memories: {len(memories)}")
             self.logger.debug(f"Character contexts: {list(character_contexts.keys()) if character_contexts else None}")
         
-        # Build the prompt
+        # Build context sections
         memory_context = "\n".join(f"- {m}" for m in memories)
+        chapter_context = "\n\n".join(chapter_summaries) if chapter_summaries else "No previous chapters"
         
-        # Separate player character from NPCs for clearer context
+        # Character handling
         player_context = ""
-        npc_contexts = ""
+        npc_contexts = []
+        present_characters = []
         if character_contexts:
             for name, ctx in character_contexts.items():
                 if ctx["personality"].get("archetype") == "Player Character":
-                    player_context = f"Player ({name}):\n{json.dumps(ctx, indent=2)}"
+                    player_context = f"## Player Character\n{self._format_character(ctx)}"
+                    present_characters.append(name)
                 else:
-                    npc_contexts += f"\n{name}:\n{json.dumps(ctx, indent=2)}"
+                    npc_contexts.append(f"## {name}\n{self._format_character(ctx)}")
+                    present_characters.append(name)
         
-        # Define metadata format separately to avoid deep nesting in f-string
-        metadata_format = """
-{
-    "character_updates": {
-        "character_name": {
-            "relationships": {"other_character": sentiment_value},
-            "goal_updates": [{"description": "goal text", "progress": progress_value}],
-            "new_knowledge": ["new fact learned"]
-        }
-    }
-}"""
-            
-        prompt = f"""You are an expert storyteller. Based on the current story state and user input, generate the next story beat.
+        # Professional writing guidance
+        writing_advice = """## Storytelling Guidelines (Brandon Sanderson-inspired)
+1. **Character Motivations**: Ensure character actions align with their stated goals and personality
+2. **World-Building Details**: Include 1-2 sensory details that reinforce the setting
+3. **Progression**: Advance at least one character relationship or plot thread
+4. **Pacing**: Vary sentence structure between short impactful statements and longer descriptive ones
+5. **Foreshadowing**: Include subtle hints about future plot developments
+6. **Voice**: Maintain a tone suitable for the current scene (e.g., ominous for tense moments)
+7. **Sanderson's First Law**: Ensure magic/unique elements solve problems in established ways"""
+        
+        prompt = f"""# Storyteller Instructions
+You are a professional novelist crafting an immersive story experience. Below is the story context and your guidelines.
 
-Current Story State:
+# Story Context
+## Story History (Summarized)
+{chapter_context}
+
+## Current Scene
 {current_content}
 
-Relevant Memories:
+## Present Characters
+{', '.join(present_characters) if present_characters else 'No known characters present'}
+
+# Character Contexts
+{player_context}
+{"\n".join(npc_contexts)}
+
+# Relevant Memories
 {memory_context}
 
-Player Character Information:
-{player_context}
-
-NPC Information:
-{npc_contexts}
-
-User Input:
+# Player Input
 {user_input}
 
-Generate an engaging continuation of the story that:
-1. Responds naturally to the user's input, taking into account the player character's personality and background
-2. Maintains consistency with previous events and character knowledge
-3. Has NPCs react appropriately based on their personalities and relationships
-4. Advances character relationships and story development naturally
+{writing_advice}
 
-Format your response as JSON with:
-- "text": The story continuation (written in second person, addressing the player character directly)
-- "metadata": {metadata_format}
-"""
+# Output Requirements
+- Respond naturally to the input while advancing the overall narrative
+- Include character-appropriate dialogue and reactions
+- Provide 3 meaningful choices that reflect different approaches
+- Use vivid, sensory language while maintaining readability
+
+# Response Format
+{{
+    "text": "Your narrative text...",
+    "metadata": {metadata_format}
+}}"""
         
         # Call the LLM
         response = await self.client.chat.completions.create(
@@ -225,3 +227,21 @@ Generate dialogue that:
         # Add style guidelines based on story genre
         context['style_guidelines'] = "Medieval fantasy, dramatic pacing, player agency"
         return await self.generate_story_beat(context['history'], context['input'], context['characters'], context['recent_events']) 
+
+    async def compress_context(self, context: str) -> str:
+        """Reduce context size while preserving key info"""
+        return await self.client.chat.completions.create(
+            model="gpt-4-turbo-preview",
+            messages=[{
+                "role": "system",
+                "content": "Compress this narrative context while preserving characters, key events, and relationships."
+            }]
+        ) 
+
+    def _format_character(self, ctx: dict) -> str:
+        """Format character context for prompts"""
+        return f"""- Personality: {ctx['personality'].get('archetype', 'Unknown')}
+- Key Traits: {', '.join(ctx['personality'].get('traits', []))}
+- Current Goals: {', '.join(g['description'] for g in ctx.get('goals', []))}
+- Recent Knowledge: {', '.join(ctx.get('new_knowledge', []))[-3:]}
+- Key Relationships: {', '.join(f"{k}: {v}" for k,v in ctx.get('relationships', {}).items())}""" 

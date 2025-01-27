@@ -2,7 +2,7 @@
 Vector-based memory storage implementation using FAISS.
 """
 import json
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, UUID
 from datetime import datetime
 import numpy as np
 import faiss
@@ -166,3 +166,7 @@ class MemoryBank:
         # Restore FAISS index
         if embeddings:
             self.index.add(np.array(embeddings, dtype=np.float32)) 
+
+    async def generate_chapter_summary(self, node_ids: List[UUID]) -> str:
+        memories = [self.get_memory(id) for id in node_ids]
+        return await self.llm.summarize("\n".join([m.content for m in memories])) 

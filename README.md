@@ -110,8 +110,10 @@ MIT License - see LICENSE file for details.
 ```mermaid
 classDiagram
     class Story {
-        +Graph graph
-        +MemoryBank memory
+        +UUID id
+        +DateTime created_at
+        +StoryGraph graph
+        +MemoryBank narrative_memory
         +dict characters
         +advance(user_input: str) dict
         +start() dict
@@ -132,7 +134,7 @@ classDiagram
     
     class Character {
         +PersonalityModel personality
-        +MemoryBank memory
+        +MemoryBank personal_memory
         +speak(topic: str) str
         +learn(knowledge: str)
     }
@@ -153,10 +155,10 @@ classDiagram
     }
     
     Story --> StoryGraph
-    Story --> MemoryBank
+    Story --> MemoryBank: narrative_memory
     Story --> LLMService
     Story --> StoryRepository
-    Character --> MemoryBank
+    Character --> MemoryBank: personal_memory
     StoryGraph --> StoryNode
 ```
 
@@ -168,18 +170,23 @@ sequenceDiagram
     participant Story
     participant StoryGraph
     participant LLMService
-    participant MemoryBank
+    participant NarrativeMemory
     participant Character
+    participant PersonalMemory
     
     User->>Story: advance("Check the chest")
-    Story->>MemoryBank: retrieve_relevant("chest")
-    MemoryBank-->>Story: relevant_memories
+    Story->>NarrativeMemory: retrieve_relevant("chest")
+    NarrativeMemory-->>Story: relevant_memories
+    Story->>Character: get_context()
+    Character->>PersonalMemory: retrieve("chest")
+    PersonalMemory-->>Character: personal_memories
     Story->>StoryGraph: process_input()
     StoryGraph->>LLMService: generate_story_beat()
     LLMService-->>StoryGraph: LLMResponse
     StoryGraph->>Story: StoryBeat
     Story->>Character: apply_updates()
-    Character->>MemoryBank: store("Found magical chest")
+    Character->>PersonalMemory: store("Found magical chest")
+    Story->>NarrativeMemory: store(new_beat)
     Story-->>User: Next story beat
 ```
 
@@ -191,6 +198,10 @@ The central controller managing narrative flow. Example usage:
 story = Story(config=StoryConfig(title="Dragon Quest"))
 await story.add_character(Character("Gandalf", wizard_personality))
 await story.start()
+
+# Save state includes unique ID and timestamps
+saved_state = story.save_state()
+print(f"Saving story ID: {saved_state['story_id']}")
 ```
 
 ### StoryGraph (echoforgeai/graph/story_graph.py)
@@ -217,10 +228,17 @@ merlin = Character(
 ```
 
 ### MemoryBank (echoforgeai/memory/vector_store.py)
-Stores and retrieves contextual memories using embeddings:
+Differentiated memory storage:
 ```python
-memory.store("The king wears a golden crown", metadata={"importance": 0.8})
-relevant = memory.retrieve("royal jewelry")
+# Story-wide narrative memory
+story.narrative_memory.store("Dragon's hoard discovered", metadata={"chapter": 3})
+
+# Character personal memory 
+gandalf.personal_memory.store("The chest radiates ancient magic", metadata={"secret": True})
+
+# Retrieve from appropriate context
+story_memories = story.narrative_memory.retrieve("dragon treasure")
+char_memories = gandalf.personal_memory.retrieve("ancient magic")
 ```
 
 ### StoryRepository (echoforgeai/persistence/story_repository.py)
@@ -230,11 +248,13 @@ repo = StoryRepository()
 await repo.save_story(current_story)  # Auto-saves characters, graph, and memories
 ```
 
-## Flow Example
+## Updated Flow Example
 1. User provides input through `story.advance()`
-2. System retrieves relevant memories and character contexts
-3. LLM generates next story beat with character reactions
-4. New StoryNode is created and added to the graph
-5. Character states and relationships are updated
-6. Interaction is stored in memory for future recall
-7. Updated story state is returned to the user
+2. System retrieves relevant memories from narrative and character contexts
+3. Story graph manages chapter transitions and context window
+4. LLM generates next story beat with professional writing guidelines
+5. New StoryNode is created with player inputs and branching strategy
+6. Character states and relationships are updated
+7. Interaction is stored in appropriate memory systems
+8. Chapter summaries are generated when context window exceeds limit
+9. Updated story state with unique ID is returned to user

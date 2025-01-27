@@ -4,6 +4,7 @@ Story graph implementation for managing branching narratives.
 from typing import Dict, List, Optional, Set, Any
 from uuid import UUID, uuid4
 from pydantic import BaseModel, Field
+from datetime import datetime
 
 from echoforgeai.core.llm_service import LLMResponse
 
@@ -35,6 +36,10 @@ class StoryNode(BaseModel):
     depth: int = 0  # Track narrative depth
     story_thread: str = "main"  # For parallel storylines
     hidden_requirements: Dict[str, Any] = Field(default_factory=dict)
+    player_inputs: List[Dict] = Field(default_factory=list)  # {player_id: str, input: str}
+    collaborative_context: str = ""
+    last_updated: datetime = Field(default_factory=datetime.now)
+    branching_strategy: str = Field(default="linear")  # Options: "save_point", "parallel", "time_jump"
     
     class Config:
         arbitrary_types_allowed = True
@@ -61,6 +66,8 @@ class StoryGraph:
         """Initialize an empty story graph."""
         self.nodes: Dict[UUID, StoryNode] = {}
         self._entry_nodes: List[UUID] = []
+        self.chapter_summaries: List[str] = []  # Store summarized chapters
+        self.max_context_nodes = 20  # Configurable
         
     def add_node(self, node: StoryNode) -> None:
         """Add a node to the graph."""
@@ -105,6 +112,10 @@ class StoryGraph:
         Returns:
             A StoryBeat containing the next piece of narrative and available choices
         """
+        # Before generating new beat
+        if len(self.nodes) > self.max_context_nodes:
+            await self._finalize_chapter()
+        
         # Create a new node for this story beat
         new_node = StoryNode(
             title=f"Response to: {user_input[:50]}...",
@@ -177,3 +188,22 @@ class StoryGraph:
             if node_id in node.branches.values():
                 return node
         return None 
+
+    async def _finalize_chapter(self):
+        """Summarize and archive old nodes"""
+        old_nodes = sorted(self.nodes.values(), key=lambda n: n.last_updated)[:self.max_context_nodes//2]
+        summary = await self._summarize_nodes(old_nodes)
+        self.chapter_summaries.append(summary)
+        # Remove old nodes
+        for node in old_nodes:
+            del self.nodes[node.id] 
+
+    async def create_save_point(self, node: StoryNode) -> UUID:
+        """Create a restorable branch point"""
+        save_node = StoryNode(
+            title=f"Save Point: {node.title}",
+            content=node.content,
+            branching_strategy="save_point"
+        )
+        self.add_node(save_node)
+        return save_node.id 

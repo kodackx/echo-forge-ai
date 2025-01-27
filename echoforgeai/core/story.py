@@ -1,9 +1,11 @@
 """
 Core Story class that serves as the main entry point for HearthKin 2.
 """
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, UUID
 import logging
 from pydantic import BaseModel
+from uuid import uuid4
+from datetime import datetime
 
 from echoforgeai.graph.story_graph import StoryGraph, StoryNode
 from echoforgeai.memory.vector_store import MemoryBank
@@ -34,7 +36,7 @@ class Story:
         """Initialize a new story with the given configuration."""
         self.config = config
         self.graph = StoryGraph()
-        self.memory = MemoryBank(
+        self.narrative_memory = MemoryBank(
             backend=config.memory_backend,
             max_items=config.max_memory_items
         )
@@ -58,10 +60,16 @@ class Story:
                 self.logger.addHandler(handler)
             self.logger.info(f"Story initialized with config: {config.dict(exclude={'api_key'})}")
         
+        self.active_players: Dict[str, UUID] = {}  # player_id -> current_node_id
+        self.player_sessions: Dict[str, dict] = {}  # Session state for each player
+        
+        self.id = uuid4()  # Add unique identifier
+        self.created_at = datetime.now()
+        
     async def add_character(self, character: Character) -> None:
         """Add a character to the story."""
         self.characters[character.name] = character
-        character.bind_memory_bank(self.memory)
+        character.bind_memory_bank(self.narrative_memory)
         character.bind_llm_service(self.llm)
         
     async def advance(self, user_input: str) -> dict:
@@ -76,7 +84,7 @@ class Story:
             self.logger.debug(f"Advancing story with user input: {user_input}")
             
         # Retrieve relevant memories
-        relevant_memories = await self.memory.retrieve_relevant(user_input)
+        relevant_memories = await self.narrative_memory.retrieve_relevant(user_input)
         if self.config.debug_mode:
             self.logger.debug(f"Retrieved {len(relevant_memories)} relevant memories")
             
@@ -120,7 +128,7 @@ class Story:
             self.logger.debug(f"Advanced to new story node: {next_beat.next_node.id}")
         
         # Store new memories from this interaction
-        await self.memory.store(next_beat.to_memory())
+        await self.narrative_memory.store(next_beat.to_memory())
         if self.config.debug_mode:
             self.logger.debug("Stored new memory from interaction")
         
@@ -147,9 +155,11 @@ class Story:
     def save_state(self) -> dict:
         """Save the current story state."""
         return {
+            "story_id": str(self.id),
+            "created_at": self.created_at.isoformat(),
             "config": self.config.model_dump(),
             "current_node_id": self.current_node.id if self.current_node else None,
-            "memory": self.memory.export_state(),
+            "narrative_memory": self.narrative_memory.export_state(),
             "graph": self.graph.export_state(),
             "characters": {
                 name: char.export_state()
@@ -163,8 +173,11 @@ class Story:
         config = StoryConfig(**state["config"])
         story = cls(config)
         
+        story.id = UUID(state["story_id"])
+        story.created_at = datetime.fromisoformat(state["created_at"])
+        
         # Restore state
-        await story.memory.import_state(state["memory"])
+        await story.narrative_memory.import_state(state["narrative_memory"])
         await story.graph.import_state(state["graph"])
         
         # Restore characters
