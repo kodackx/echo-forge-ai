@@ -147,6 +147,7 @@ classDiagram
     class LLMService {
         +generate_story_beat(context: dict) LLMResponse
         +generate_dialogue(character: Character) str
+        +generate_character_reflection() str
     }
     
     class StoryRepository {
@@ -168,24 +169,28 @@ classDiagram
 sequenceDiagram
     participant User
     participant Story
-    participant StoryGraph
-    participant LLMService
-    participant NarrativeMemory
     participant Character
-    participant PersonalMemory
+    participant LLMService
+    participant StoryGraph
+    participant NarrativeMemory
     
     User->>Story: advance("Check the chest")
     Story->>NarrativeMemory: retrieve_relevant("chest")
     NarrativeMemory-->>Story: relevant_memories
-    Story->>Character: get_context()
-    Character->>PersonalMemory: retrieve("chest")
-    PersonalMemory-->>Character: personal_memories
+    
+    loop For each character
+        Story->>Character: get_context()
+        Character->>NarrativeMemory: retrieve("chest")
+        NarrativeMemory-->>Character: personal_memories
+        Story->>LLMService: generate_character_reflection()
+        LLMService-->>Story: internal_monologue
+    end
+    
     Story->>StoryGraph: process_input()
-    StoryGraph->>LLMService: generate_story_beat()
+    StoryGraph->>LLMService: generate_story_beat(internal_monologues)
     LLMService-->>StoryGraph: LLMResponse
     StoryGraph->>Story: StoryBeat
     Story->>Character: apply_updates()
-    Character->>PersonalMemory: store("Found magical chest")
     Story->>NarrativeMemory: store(new_beat)
     Story-->>User: Next story beat
 ```
@@ -248,13 +253,40 @@ repo = StoryRepository()
 await repo.save_story(current_story)  # Auto-saves characters, graph, and memories
 ```
 
-## Updated Flow Example
-1. User provides input through `story.advance()`
-2. System retrieves relevant memories from narrative and character contexts
-3. Story graph manages chapter transitions and context window
-4. LLM generates next story beat with professional writing guidelines
-5. New StoryNode is created with player inputs and branching strategy
-6. Character states and relationships are updated
-7. Interaction is stored in appropriate memory systems
-8. Chapter summaries are generated when context window exceeds limit
-9. Updated story state with unique ID is returned to user
+### LLMService (echoforgeai/core/llm_service.py)
+Now handles both narrative generation and character reasoning:
+```python
+class LLMService:
+    async def generate_story_beat(...)  # Now accepts internal_monologues
+    async def generate_character_reflection(...)  # New method
+    
+class LLMResponse:
+    internal_monologues: Dict[str, str]  # Stores character thoughts
+```
+
+### Story (echoforgeai/core/story.py)
+Handles character reflection loop:
+```python
+class Story:
+    async def advance(self, user_input: str) -> dict:
+        # New reflection loop
+        for name, char in self.characters.items():
+            internal_monologues[name] = await self.llm.generate_character_reflection(...)
+        
+        # Updated story beat generation
+        llm_response = await self.llm.generate_story_beat(..., internal_monologues)
+```
+
+### Example Debug Output
+Added character thought visualization:
+```plaintext
+[DEBUG] 2024-03-20 14:35:22 - echoforgeai.llm - Geralt internal monologue: 
+"The griffin's wounds make it desperate - I should warn Ciri to keep her distance. But will she listen?"
+
+[DEBUG] 2024-03-20 14:35:23 - echoforgeai.llm - Yennefer internal monologue: 
+"These ruins radiate chaos energy... perfect for a trap, but is now the right time to reveal my plan?"
+
+[DEBUG] 2024-03-20 14:35:25 - echoforgeai.story - Generated story beat incorporated:
+- Geralt warns Ciri about the injured griffin
+- Yennefer subtly examines the ancient ruins
+- Player given choice to attack or use signs

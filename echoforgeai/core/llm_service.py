@@ -15,6 +15,7 @@ class LLMResponse(BaseModel):
     choices: List[str] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
     dialogues: Dict[str, str] = Field(default_factory=dict)  # {character_name: dialogue_text}
+    internal_monologues: Dict[str, str] = Field(default_factory=dict)  # Add internal thoughts
 
     class Config:
         arbitrary_types_allowed = True
@@ -47,7 +48,8 @@ class LLMService:
         user_input: str,
         memories: List[str],
         character_contexts: Optional[Dict[str, dict]] = None,
-        chapter_summaries: List[str] = None
+        chapter_summaries: List[str] = None,
+        internal_monologues: Dict[str, str] = None
     ) -> LLMResponse:
         """Enhanced story beat generation with professional writing guidance"""
         if self.debug_mode:
@@ -83,6 +85,9 @@ class LLMService:
 6. **Voice**: Maintain a tone suitable for the current scene (e.g., ominous for tense moments)
 7. **Sanderson's First Law**: Ensure magic/unique elements solve problems in established ways"""
         
+        # Update prompt template to include character thoughts
+        character_thoughts = "\n".join([f"{name}: {thought}" for name, thought in internal_monologues.items()])
+        
         prompt = f"""# Storyteller Instructions
 You are a professional novelist crafting an immersive story experience. Below is the story context and your guidelines.
 
@@ -105,6 +110,9 @@ You are a professional novelist crafting an immersive story experience. Below is
 
 # Player Input
 {user_input}
+
+# Updated Context with Character Thoughts
+{character_thoughts}
 
 {writing_advice}
 
@@ -245,3 +253,46 @@ Generate dialogue that:
 - Current Goals: {', '.join(g['description'] for g in ctx.get('goals', []))}
 - Recent Knowledge: {', '.join(ctx.get('new_knowledge', []))[-3:]}
 - Key Relationships: {', '.join(f"{k}: {v}" for k,v in ctx.get('relationships', {}).items())}""" 
+
+    async def generate_character_reflection(
+        self,
+        character_name: str,
+        personality: dict,
+        current_scene: str,
+        relevant_memories: List[str],
+        relationships: Dict[str, float]
+    ) -> str:
+        """Generate a character's internal monologue about the current situation."""
+        memory_context = "\n".join(f"- {m}" for m in relevant_memories)
+        relationship_context = "\n".join([f"{name}: {sentiment}" for name, sentiment in relationships.items()])
+        
+        prompt = f"""You are {character_name}. Given the current situation, your personality, and memories, 
+        what are you thinking privately? 
+
+        Personality:
+        {json.dumps(personality, indent=2)}
+
+        Relevant Memories:
+        {memory_context}
+
+        Relationships:
+        {relationship_context}
+
+        Current Scene:
+        {current_scene}
+
+        Respond with a brief internal monologue (1-2 sentences) that:
+        1. Reflects your personality traits
+        2. Considers your goals and relationships
+        3. Suggests potential actions or reactions
+        """
+
+        response = await self.client.chat.completions.create(
+            model="gpt-4-turbo-preview",
+            messages=[
+                {"role": "system", "content": "You are a method actor deeply immersed in your character."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.5
+        )
+        return response.choices[0].message.content.strip() 

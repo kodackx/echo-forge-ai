@@ -96,12 +96,27 @@ class Story:
         if self.config.debug_mode:
             self.logger.debug(f"Character contexts: {list(character_contexts.keys())}")
         
-        # Generate next story beat using LLM
+        # Generate character reflections
+        internal_monologues = {}
+        for name, char in self.characters.items():
+            char_memories = await char.recall(user_input)
+            internal_monologues[name] = await self.llm.generate_character_reflection(
+                character_name=name,
+                personality=char.personality.model_dump(),
+                current_scene=self.current_node.content if self.current_node else "",
+                relevant_memories=char_memories,
+                relationships=char.personality.relationships
+            )
+            if self.config.debug_mode:
+                self.logger.debug(f"{name} internal monologue: {internal_monologues[name]}")
+        
+        # Pass monologues to story beat generation
         llm_response = await self.llm.generate_story_beat(
             current_content=self.current_node.content,
             user_input=user_input,
             memories=[m.content for m in relevant_memories],
-            character_contexts=character_contexts
+            character_contexts=character_contexts,
+            internal_monologues=internal_monologues
         )
         
         # Update character states based on metadata
