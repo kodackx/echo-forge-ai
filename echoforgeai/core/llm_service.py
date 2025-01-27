@@ -3,6 +3,7 @@ LLM service for handling interactions with language models.
 """
 from typing import Dict, List, Optional, Union, Any
 import json
+import logging
 from pydantic import BaseModel, Field
 from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -24,9 +25,15 @@ class LLMService:
     Currently supports OpenAI's API, but can be extended for other providers.
     """
     
-    def __init__(self, provider: str = "openai", api_key: Optional[str] = None):
+    def __init__(self, provider: str = "openai", api_key: Optional[str] = None, debug_mode: bool = False):
         """Initialize the LLM service."""
         self.provider = provider
+        self.debug_mode = debug_mode
+        
+        if debug_mode:
+            self.logger = logging.getLogger("echoforgeai.llm")
+            self.logger.info(f"Initializing LLM service with provider: {provider}")
+            
         if provider == "openai":
             self.client = AsyncOpenAI(api_key=api_key)
         else:
@@ -52,6 +59,12 @@ class LLMService:
         Returns:
             LLMResponse containing generated text and choices
         """
+        if self.debug_mode:
+            self.logger.debug(f"Generating story beat for input: {user_input}")
+            self.logger.debug(f"Current content length: {len(current_content)}")
+            self.logger.debug(f"Number of memories: {len(memories)}")
+            self.logger.debug(f"Character contexts: {list(character_contexts.keys()) if character_contexts else None}")
+        
         # Build the prompt
         memory_context = "\n".join(f"- {m}" for m in memories)
         
@@ -192,3 +205,23 @@ Generate dialogue that:
             input=text
         )
         return response.data[0].embedding 
+
+    async def generate_story_beat(self, context: Dict) -> LLMResponse:
+        """Enhanced context handling"""
+        prompt_template = """
+        Current Story State: {history}
+        Characters Present: {characters}
+        Recent Events: {recent_events}
+        Player Action: {input}
+        
+        Generate 2-3 paragraph response that:
+        - Advances the main story thread
+        - Develops character relationships
+        - Introduces 1-2 new plot hooks
+        - Provides 3 meaningful choices
+        
+        Style: {style_guidelines}
+        """
+        # Add style guidelines based on story genre
+        context['style_guidelines'] = "Medieval fantasy, dramatic pacing, player agency"
+        return await self.generate_story_beat(context['history'], context['input'], context['characters'], context['recent_events']) 

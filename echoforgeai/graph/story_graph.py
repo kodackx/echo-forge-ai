@@ -1,7 +1,7 @@
 """
 Story graph implementation for managing branching narratives.
 """
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Any
 from uuid import UUID, uuid4
 from pydantic import BaseModel, Field
 
@@ -31,6 +31,10 @@ class StoryNode(BaseModel):
     requirements: Optional[dict] = None
     branches: Dict[str, UUID] = Field(default_factory=dict)
     is_entry_point: bool = False
+    user_input: Optional[str] = None  # Track the choice that led here
+    depth: int = 0  # Track narrative depth
+    story_thread: str = "main"  # For parallel storylines
+    hidden_requirements: Dict[str, Any] = Field(default_factory=dict)
     
     class Config:
         arbitrary_types_allowed = True
@@ -157,3 +161,19 @@ class StoryGraph:
             
         # Restore entry nodes
         self._entry_nodes = [UUID(node_id) for node_id in state["entry_nodes"]] 
+
+    def get_narrative_path(self, max_depth=10) -> List[StoryNode]:
+        """Get current narrative path for context"""
+        path = []
+        current = self.current_node
+        while current and len(path) < max_depth:
+            path.insert(0, current)
+            current = self.get_previous_node(current.id)
+        return path
+
+    def get_previous_node(self, node_id: UUID) -> Optional[StoryNode]:
+        """Find which node leads to this one"""
+        for node in self.nodes.values():
+            if node_id in node.branches.values():
+                return node
+        return None 

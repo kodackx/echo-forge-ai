@@ -3,6 +3,7 @@ Character class that manages personality traits, memory, and dialogue generation
 """
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
+from datetime import datetime
 
 from echoforgeai.memory.vector_store import MemoryBank
 from echoforgeai.core.llm_service import LLMService
@@ -180,4 +181,31 @@ class Character:
             name=state["name"],
             personality=personality,
             initial_knowledge=state["initial_knowledge"]
-        ) 
+        )
+
+    async def get_contextual_memories(self, query: str, recent_weight=0.3) -> List[str]:
+        """Get memories with recency weighting"""
+        memories = await self.recall(query)
+        if not memories:
+            return []
+            
+        # Apply recency weighting
+        sorted_memories = sorted(
+            self._memory.memories,
+            key=lambda m: m.timestamp,
+            reverse=True
+        )[:len(memories)]
+        
+        return [
+            f"{m.content} ({(datetime.now() - m.timestamp).days} days ago)"
+            for m in sorted_memories
+        ]
+
+    async def generate_dialogue_prompt(self, situation: str) -> str:
+        """Generate character-specific prompt template"""
+        traits = ", ".join([t.name for t in self.personality.traits.values()])
+        return f"""
+        As {self.name}, a {self.personality.archetype} with {traits} traits, 
+        respond to: {situation}
+        Considering your knowledge: {', '.join(await self.recall(situation))}
+        """ 
